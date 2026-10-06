@@ -1,4 +1,4 @@
-// Copy this file to config.js and insert your Firebase credentials
+// Copy this file to firebase-config.js and insert your Firebase credentials
 const CONFIG = {
   FIREBASE: {
     apiKey: "YOUR_API_KEY",

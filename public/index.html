@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pavement Accessibility Audit Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1>Pavement Accessibility Audit Map</h1>
+    <div id="auth-status" class="auth-bar">
+      <span id="user-display">Not logged in</span>
+      <button id="login-btn">Log In</button>
+      <button id="logout-btn" style="display:none;">Log Out</button>
+    </div>
+  </header>
+
+  <main class="main-container">
+    <div id="map"></div>
+    
+    <!-- Issue Logging Form Sidebar -->
+    <aside id="sidebar" class="sidebar">
+      <h2>Log an Issue</h2>
+      <p class="instructions">Click on the map to place a pin, then fill out the form below.</p>
+      
+<form id="issue-form">
+        <label for="issueType">Issue Category:</label>
+        <select id="issueType" required>
+          <option value="">-- Select Category --</option>
+          <option value="missing_dropped_curb">Missing Dropped Curb</option>
+          <option value="high_curb">High / Uneven Curb</option>
+          <option value="broken_pavement">Broken / Uneven Paving Slabs</option>
+          <option value="overgrown_vegetation">Overgrown Vegetation / Obstruction</option>
+          <option value="narrow_pavement">Pavement Too Narrow</option>
+          <option value="other">Other Obstruction</option>
+        </select>
+
+        <label for="description">Details / Description:</label>
+        <textarea id="description" rows="4" placeholder="Describe the accessibility obstacle..." required></textarea>
+
+        <label for="photo">Upload Photo (optional):</label>
+        <input type="file" id="photo" accept="image/*">
+
+        <input type="hidden" id="lat">
+        <input type="hidden" id="lng">
+
+        <button type="submit" id="submit-btn" disabled>Log Accessibility Issue</button>
+      </form>
+    </aside>
+  </main>
+
+  <!-- Login Modal -->
+  <div id="login-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <span class="close-btn">&times;</span>
+      <h2>Volunteer Log In</h2>
+      <form id="login-form">
+        <label for="email">Email Address:</label>
+        <input type="email" id="email" required>
+        <label for="password">Password:</label>
+        <input type="password" id="password" required>
+        <button type="submit">Sign In</button>
+      </form>
+      <p id="login-error" class="error-msg"></p>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

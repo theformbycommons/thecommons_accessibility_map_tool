@@ -1,0 +1,282 @@
+import { db } from './firebase-config.js';
+import { collection, getDocs, query, orderBy, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+let loadedIssues = [];
+
+// DOM Elements
+const startDateInput = document.getElementById('start-date');
+const endDateInput = document.getElementById('end-date');
+const auditRows = document.getElementById('audit-rows');
+const exportCsvBtn = document.getElementById('export-csv-btn');
+const exportDocxBtn = document.getElementById('export-docx-btn');
+
+// Fetch and Filter Issues
+export async function loadAudits() {
+  if (!auditRows) return;
+  auditRows.innerHTML = '<tr><td colspan="6">Loading records...</td></tr>';
+
+  try {
+    let q = query(collection(db, "accessibility_issues"), orderBy("createdAt", "desc"));
+
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) {
+      auditRows.innerHTML = '<tr><td colspan="6">No audits found.</td></tr>';
+      loadedIssues = [];
+      return;
+    }
+
+    const startDateVal = startDateInput ? startDateInput.value : null;
+    const endDateVal = endDateInput ? endDateInput.value : null;
+
+    loadedIssues = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      data.id = doc.id;
+
+      // Local Date Filtering
+      let docDate = data.createdAt && data.createdAt.toDate ? data.createdAt.toDate() : null;
+      if (startDateVal && docDate && docDate < new Date(startDateVal)) return;
+      if (endDateVal && docDate && docDate > new Date(endDateVal + 'T23:59:59')) return;
+
+      loadedIssues.push(data);
+    });
+
+    renderTable(loadedIssues);
+
+  } catch (error) {
+    console.error("Error loading audits:", error);
+    auditRows.innerHTML = `<tr><td colspan="6" style="color:red;">Error fetching records: ${error.message}</td></tr>`;
+  }
+}
+
+// Render Table Rows matching admin_2.html layout
+function renderTable(issues) {
+  if (!issues.length) {
+    auditRows.innerHTML = '<tr><td colspan="6">No audits found for selected range.</td></tr>';
+    return;
+  }
+
+  auditRows.innerHTML = '';
+
+  issues.forEach((item, idx) => {
+    const dateStr = item.createdAt && item.createdAt.toDate 
+      ? item.createdAt.toDate().toLocaleDateString() 
+      : 'N/A';
+    
+    const category = item.issueType ? item.issueType.replace(/_/g, ' ').toUpperCase() : 'GENERAL OBSTACLE';
+    const coords = (typeof item.latitude === 'number' && typeof item.longitude === 'number')
+      ? `${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)}`
+      : 'N/A';
+
+    const imgTag = item.photoUrl 
+      ? `<a href="${item.photoUrl}" target="_blank"><img src="${item.photoUrl}" class="issue-thumb" alt="Issue Photo" /></a>` 
+      : '<span style="color:#94a3b8; font-size:11px;">No photo</span>';
+
+    const issuesHTML = `
+      <div class="issue-details-container">
+        <div class="issue-item">
+          <div class="issue-meta">
+            <div class="issue-title">Issue #${idx + 1}: ${category}</div>
+            <div class="issue-sub">Notes: ${item.description || 'None'}</div>
+          </div>
+          <div>${imgTag}</div>
+        </div>
+      </div>
+    `;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="vertical-align:top;">${dateStr}</td>
+      <td style="vertical-align:top;"><strong>Pavement Barrier</strong></td>
+      <td style="vertical-align:top;">${coords}</td>
+      <td>${issuesHTML}</td>
+      <td style="vertical-align:top;">${item.createdBy || 'Volunteer'}</td>
+      <td style="vertical-align:top;">--</td>
+    `;
+
+    auditRows.appendChild(tr);
+  });
+}
+
+// Base64 to Uint8Array Conversion for docx.js ImageRun
+function base64ToUint8Array(base64Str) {
+  const base64Data = base64Str.split(',')[1] || base64Str;
+  const binaryString = window.atob(base64Data);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+// Export Word Report (.docx)
+export async function exportToWord() {
+  if (loadedIssues.length === 0) return alert("No audits available to export.");
+
+  const btn = document.getElementById('export-docx-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Building Docx Report...';
+  }
+
+  const docx = window.docx;
+  const children = [];
+
+  const TOTAL_TABLE_WIDTH = 9360;
+  const COL_1_WIDTH = 2500;
+  const COL_2_WIDTH = 6860;
+
+  children.push(new docx.Paragraph({
+    text: "Street Accessibility Audit Report",
+    heading: docx.HeadingLevel.TITLE,
+    alignment: docx.AlignmentType.CENTER,
+    spaceAfter: { after: 120 }
+  }));
+
+  children.push(new docx.Paragraph({
+    text: `Generated on ${new Date().toLocaleDateString()} | Total Logged Issues: ${loadedIssues.length}`,
+    alignment: docx.AlignmentType.CENTER,
+    spaceAfter: { after: 360 }
+  }));
+
+  for (let index = 0; index < loadedIssues.length; index++) {
+    const item = loadedIssues[index];
+    const dateStr = item.createdAt && item.createdAt.toDate 
+      ? item.createdAt.toDate().toLocaleDateString() 
+      : 'N/A';
+    const category = item.issueType ? item.issueType.replace(/_/g, ' ').toUpperCase() : 'OBSTACLE';
+    const coords = (item.latitude && item.longitude) 
+      ? `${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)}` 
+      : 'N/A';
+
+    children.push(new docx.Paragraph({
+      text: `Issue #${index + 1}: ${category}`,
+      heading: docx.HeadingLevel.HEADING_2,
+      spaceBefore: { before: 240 },
+      spaceAfter: { after: 120 }
+    }));
+
+    const tableRows = [
+      new docx.TableRow({
+        children: [
+          new docx.TableCell({
+            width: { size: COL_1_WIDTH, type: docx.WidthType.DXA },
+            children: [new docx.Paragraph({ children: [new docx.TextRun({ text: "Date Logged", bold: true })] })]
+          }),
+          new docx.TableCell({
+            width: { size: COL_2_WIDTH, type: docx.WidthType.DXA },
+            children: [new docx.Paragraph({ text: dateStr })]
+          })
+        ]
+      }),
+      new docx.TableRow({
+        children: [
+          new docx.TableCell({
+            width: { size: COL_1_WIDTH, type: docx.WidthType.DXA },
+            children: [new docx.Paragraph({ children: [new docx.TextRun({ text: "GPS Coordinates", bold: true })] })]
+          }),
+          new docx.TableCell({
+            width: { size: COL_2_WIDTH, type: docx.WidthType.DXA },
+            children: [new docx.Paragraph({ text: coords })]
+          })
+        ]
+      }),
+      new docx.TableRow({
+        children: [
+          new docx.TableCell({
+            width: { size: COL_1_WIDTH, type: docx.WidthType.DXA },
+            children: [new docx.Paragraph({ children: [new docx.TextRun({ text: "Submitted By", bold: true })] })]
+          }),
+          new docx.TableCell({
+            width: { size: COL_2_WIDTH, type: docx.WidthType.DXA },
+            children: [new docx.Paragraph({ text: item.createdBy || 'Volunteer' })]
+          })
+        ]
+      })
+    ];
+
+    children.push(new docx.Table({
+      width: { size: TOTAL_TABLE_WIDTH, type: docx.WidthType.DXA },
+      rows: tableRows
+    }));
+
+    if (item.description) {
+      children.push(new docx.Paragraph({
+        text: `Description / Notes: ${item.description}`,
+        spaceBefore: { before: 100 },
+        spaceAfter: { after: 100 }
+      }));
+    }
+
+    if (item.photoUrl) {
+      try {
+        const imageBytes = base64ToUint8Array(item.photoUrl);
+        const imageRun = new docx.ImageRun({
+          data: imageBytes,
+          transformation: { width: 320, height: 240 }
+        });
+        children.push(new docx.Paragraph({
+          children: [imageRun],
+          spaceBefore: { before: 80 },
+          spaceAfter: { after: 120 }
+        }));
+      } catch (err) {
+        console.error("Could not append image run:", err);
+      }
+    }
+
+    children.push(new docx.Paragraph({
+      text: "_________________________________________________________________________________",
+      spaceBefore: { before: 160 },
+      spaceAfter: { after: 200 }
+    }));
+  }
+
+  const doc = new docx.Document({
+    sections: [{ properties: {}, children: children }]
+  });
+
+  const blob = await docx.Packer.toBlob(doc);
+  window.saveAs(blob, `Street_Accessibility_Report_${new Date().toISOString().slice(0,10)}.docx`);
+
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = 'Export Word (.docx)';
+  }
+}
+
+// Export CSV
+export function exportToCSV() {
+  if (loadedIssues.length === 0) return alert("No audits available to export.");
+
+  let csvContent = "data:text/csv;charset=utf-8,Date,Category,Description,Latitude,Longitude,Logged By\n";
+
+  loadedIssues.forEach(item => {
+    const dateStr = item.createdAt && item.createdAt.toDate ? item.createdAt.toDate().toISOString().slice(0,10) : '';
+    const category = `"${(item.issueType || '').replace(/"/g, '""')}"`;
+    const desc = `"${(item.description || '').replace(/"/g, '""')}"`;
+    const lat = item.latitude || '';
+    const lng = item.longitude || '';
+    const user = item.createdBy || '';
+
+    csvContent += `${dateStr},${category},${desc},${lat},${lng},${user}\n`;
+  });
+
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", `Street_Audits_${new Date().toISOString().slice(0,10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// Attach event listeners
+if (startDateInput) startDateInput.addEventListener('change', loadAudits);
+if (endDateInput) endDateInput.addEventListener('change', loadAudits);
+if (exportCsvBtn) exportCsvBtn.addEventListener('click', exportToCSV);
+if (exportDocxBtn) exportDocxBtn.addEventListener('click', exportToWord);
+
+// Load data on page init
+loadAudits();
