@@ -1,0 +1,7 @@
+# Local config containing actual private keys
+public/config.js
+
+# OS & Log files
+.DS_Store
+Thumbs.db
+*.log
